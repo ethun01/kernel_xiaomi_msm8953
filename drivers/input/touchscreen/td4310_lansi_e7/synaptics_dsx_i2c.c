@@ -2,10 +2,10 @@
  * Synaptics DSX touchscreen driver
  *
  * Copyright (C) 2012-2016 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2019 XiaoMi, Inc.
  *
  * Copyright (C) 2012 Alexandra Chin <alexandra.chin@tw.synaptics.com>
  * Copyright (C) 2012 Scott Lin <scott.lin@tw.synaptics.com>
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -75,7 +75,7 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	bdata->reset_gpio = of_get_named_gpio_flags(np,
 			"synaptics,rst-gpio", 0,
 			NULL);
-printk("reset gpio : %d\n", bdata->reset_gpio);
+printk("reset gpio : %d\n",bdata->reset_gpio);
 	retval = of_property_read_u32(np, "synaptics,irq-on-state",
 			&value);
 	if (retval < 0)
@@ -183,9 +183,14 @@ printk("reset gpio : %d\n", bdata->reset_gpio);
 		bdata->max_y_for_2d = -1;
 	}
 
-	bdata->swap_axes = of_property_read_bool(np, "synaptics,swap-axes");
-	bdata->x_flip = of_property_read_bool(np, "synaptics,x-flip");
-	bdata->y_flip = of_property_read_bool(np, "synaptics,y-flip");
+	prop = of_find_property(np, "synaptics,swap-axes", NULL);
+	bdata->swap_axes = prop > 0 ? true : false;
+
+	prop = of_find_property(np, "synaptics,x-flip", NULL);
+	bdata->x_flip = prop > 0 ? true : false;
+
+	prop = of_find_property(np, "synaptics,y-flip", NULL);
+	bdata->y_flip = prop > 0 ? true : false;
 
 	prop = of_find_property(np, "synaptics,ub-i2c-addr", NULL);
 	if (prop && prop->length) {
@@ -288,7 +293,7 @@ static void synaptics_rmi4_i2c_check_addr(struct synaptics_rmi4_data *rmi4_data,
 static int synaptics_rmi4_i2c_set_page(struct synaptics_rmi4_data *rmi4_data,
 		unsigned short addr)
 {
-	int retval = 0;
+	int retval;
 	unsigned char retry;
 	unsigned char buf[PAGE_SELECT_LEN];
 	unsigned char page;
@@ -306,7 +311,7 @@ static int synaptics_rmi4_i2c_set_page(struct synaptics_rmi4_data *rmi4_data,
 
 	if (page != rmi4_data->current_page) {
 		for (retry = 0; retry < SYN_I2C_RETRY_TIMES; retry++) {
-			if (i2c_transfer(i2c->adapter, &msg[0], 1) == 1) {
+			if (i2c_transfer(i2c->adapter, msg, 1) == 1) {
 				rmi4_data->current_page = page;
 				retval = PAGE_SELECT_LEN;
 				break;
@@ -442,11 +447,11 @@ static int synaptics_rmi4_i2c_write(struct synaptics_rmi4_data *rmi4_data,
 	struct i2c_client *i2c = to_i2c_client(rmi4_data->pdev->dev.parent);
 	struct i2c_msg msg[1];
 
-	mutex_lock(&rmi4_data->rmi4_io_ctrl_mutex);
-
 	retval = synaptics_rmi4_i2c_alloc_buf(rmi4_data, length + 1);
 	if (retval < 0)
-		goto exit;
+		return retval;
+
+	mutex_lock(&rmi4_data->rmi4_io_ctrl_mutex);
 
 	retval = synaptics_rmi4_i2c_set_page(rmi4_data, addr);
 	if (retval != PAGE_SELECT_LEN) {
@@ -469,7 +474,7 @@ static int synaptics_rmi4_i2c_write(struct synaptics_rmi4_data *rmi4_data,
 	}
 
 	for (retry = 0; retry < SYN_I2C_RETRY_TIMES; retry++) {
-		if (i2c_transfer(i2c->adapter, &msg[0], 1) == 1) {
+		if (i2c_transfer(i2c->adapter, msg, 1) == 1) {
 			retval = length;
 			break;
 		}
@@ -606,7 +611,7 @@ MODULE_DEVICE_TABLE(i2c, synaptics_rmi4_id_table);
 #ifdef CONFIG_OF
 static struct of_device_id synaptics_rmi4_of_match_table[] = {
 	{
-		.compatible = "td4310-vince_lansi-i2c",
+		.compatible = "synaptics_lansi,dsx-i2c",
 	},
 	{},
 };

@@ -4458,8 +4458,13 @@ void mdss_mdp_check_ctl_reset_status(struct mdss_mdp_ctl *ctl)
 		return;
 
 	pr_debug("hw ctl reset is set for ctl:%d\n", ctl->num);
+#ifdef CONFIG_MACH_XIAOMI_YSL
+	/* poll for at least ~2 frame */
+	status = mdss_mdp_poll_ctl_reset_status(ctl, 640);
+#else
 	/* poll for at least ~1 frame */
 	status = mdss_mdp_poll_ctl_reset_status(ctl, 320);
+#endif
 	if (status) {
 		pr_err("hw recovery is not complete for ctl:%d status:0x%x\n",
 			ctl->num, status);
@@ -5395,8 +5400,6 @@ int mdss_mdp_ctl_update_fps(struct mdss_mdp_ctl *ctl)
 		goto exit;
 	}
 
-	mdss_mdp_ctl_perf_update(ctl, 1, false);
-
 	ret = ctl->ops.config_fps_fnc(ctl, new_fps);
 	if (!ret)
 		pr_debug("fps set to %d\n", new_fps);
@@ -5657,9 +5660,6 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 
 	mutex_unlock(&ctl->flush_lock);
 
-	if (ctl->ops.wait_pingpong && !mdata->serialize_wait4pp)
-		mdss_mdp_display_wait4pingpong(ctl, false);
-
 	ATRACE_BEGIN("frame_ready");
 	mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_CFG_DONE);
 	if (commit_cb)
@@ -5683,6 +5683,9 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 	}
 
 	ATRACE_END("frame_ready");
+
+	if (ctl->ops.wait_pingpong && !mdata->serialize_wait4pp)
+		mdss_mdp_display_wait4pingpong(ctl, false);
 
 	/* Moved pp programming to post ping pong */
 	if (!ctl->is_video_mode && ctl->mfd &&

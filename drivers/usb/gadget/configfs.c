@@ -19,7 +19,7 @@
 #endif
 
 #ifdef CONFIG_USB_CONFIGFS_F_ACC
-extern int acc_ctrlrequest(struct usb_composite_dev *cdev,
+extern int acc_ctrlrequest_composite(struct usb_composite_dev *cdev,
 				const struct usb_ctrlrequest *ctrl);
 void acc_disconnect(void);
 #endif
@@ -153,12 +153,9 @@ static int usb_string_copy(const char *s, char **s_copy)
 	int ret;
 	char *str;
 	char *copy = *s_copy;
-
 	ret = strlen(s);
 	if (ret > USB_MAX_STRING_LEN)
 		return -EOVERFLOW;
-	if (ret < 1)
-		return -EINVAL;
 
 	if (copy) {
 		str = copy;
@@ -167,7 +164,7 @@ static int usb_string_copy(const char *s, char **s_copy)
 		if (!str)
 			return -ENOMEM;
 	}
-	strlcpy(str, s, USB_MAX_STRING_WITH_NULL_LEN);
+	strcpy(str, s);
 	if (str[ret - 1] == '\n')
 		str[ret - 1] = '\0';
 	*s_copy = str;
@@ -1645,7 +1642,7 @@ static int android_setup(struct usb_gadget *gadget,
 
 #ifdef CONFIG_USB_CONFIGFS_F_ACC
 	if (value < 0)
-		value = acc_ctrlrequest(cdev, c);
+		value = acc_ctrlrequest_composite(cdev, c);
 #endif
 
 	if (value < 0)

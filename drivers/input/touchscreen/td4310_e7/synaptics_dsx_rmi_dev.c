@@ -2,10 +2,10 @@
  * Synaptics DSX touchscreen driver
  *
  * Copyright (C) 2012-2016 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2019 XiaoMi, Inc.
  *
  * Copyright (C) 2012 Alexandra Chin <alexandra.chin@tw.synaptics.com>
  * Copyright (C) 2012 Scott Lin <scott.lin@tw.synaptics.com>
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -120,7 +120,7 @@ struct rmidev_data {
 static struct bin_attribute attr_data = {
 	.attr = {
 		.name = "data",
-		.mode = 0664,
+		.mode = (S_IRUGO | S_IWUSR | S_IWGRP),
 	},
 	.size = 0,
 	.read = rmidev_sysfs_data_show,
@@ -128,25 +128,25 @@ static struct bin_attribute attr_data = {
 };
 
 static struct device_attribute attrs[] = {
-	__ATTR(open, 0220,
+	__ATTR(open, (S_IWUSR | S_IWGRP),
 			synaptics_rmi4_show_error,
 			rmidev_sysfs_open_store),
-	__ATTR(release, 0220,
+	__ATTR(release, (S_IWUSR | S_IWGRP),
 			synaptics_rmi4_show_error,
 			rmidev_sysfs_release_store),
-	__ATTR(attn_state, 0444,
+	__ATTR(attn_state, S_IRUGO,
 			rmidev_sysfs_attn_state_show,
 			synaptics_rmi4_store_error),
-	__ATTR(pid, 0664,
+	__ATTR(pid, (S_IRUGO | S_IWUSR | S_IWGRP),
 			rmidev_sysfs_pid_show,
 			rmidev_sysfs_pid_store),
-	__ATTR(term, 0220,
+	__ATTR(term, (S_IWUSR | S_IWGRP),
 			synaptics_rmi4_show_error,
 			rmidev_sysfs_term_store),
-	__ATTR(intr_mask, 0664,
+	__ATTR(intr_mask, (S_IRUGO | S_IWUSR | S_IWGRP),
 			rmidev_sysfs_intr_mask_show,
 			rmidev_sysfs_intr_mask_store),
-	__ATTR(concurrent, 0664,
+	__ATTR(concurrent, (S_IRUGO | S_IWUSR | S_IWGRP),
 			rmidev_sysfs_concurrent_show,
 			rmidev_sysfs_concurrent_store),
 };
@@ -568,23 +568,16 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 		return -EBADF;
 	}
 
-	mutex_lock(&(dev_data->file_mutex));
-
-	if (*f_pos > REG_ADDR_LIMIT) {
-		retval = -EFAULT;
-		goto clean_up;
-	}
+	if (count == 0)
+		return 0;
 
 	if (count > (REG_ADDR_LIMIT - *f_pos))
 		count = REG_ADDR_LIMIT - *f_pos;
 
-	if (count == 0) {
-		retval = 0;
-		goto clean_up;
-	}
-
 	address = (unsigned short)(*f_pos);
-	
+
+	mutex_lock(&(dev_data->file_mutex));
+
 	rmidev_allocate_buffer(count);
 
 	retval = synaptics_rmi4_reg_read(rmidev->rmi4_data,
@@ -646,28 +639,19 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 		return -EBADF;
 	}
 
-	mutex_lock(&(dev_data->file_mutex));
-
-	if (*f_pos > REG_ADDR_LIMIT) {
-		retval = -EFAULT;
-		goto unlock;
-	}
+	if (count == 0)
+		return 0;
 
 	if (count > (REG_ADDR_LIMIT - *f_pos))
 		count = REG_ADDR_LIMIT - *f_pos;
 
-	if (count == 0) {
-		retval = 0;
-		goto unlock;
-	}
+	mutex_lock(&(dev_data->file_mutex));
 
 	rmidev_allocate_buffer(count);
 
-	if (copy_from_user(rmidev->tmpbuf, buf, count)) {
+	if (copy_from_user(rmidev->tmpbuf, buf, count))
 		return -EFAULT;
-		goto unlock;
-	}
-		
+
 	retval = synaptics_rmi4_reg_write(rmidev->rmi4_data,
 			*f_pos,
 			rmidev->tmpbuf,
@@ -675,7 +659,6 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 	if (retval >= 0)
 		*f_pos += retval;
 
-unlock:
 	mutex_unlock(&(dev_data->file_mutex));
 
 	return retval;

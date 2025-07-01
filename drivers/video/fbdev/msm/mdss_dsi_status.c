@@ -40,7 +40,12 @@
 #define DSI_STATUS_CHECK_INIT -1
 #define DSI_STATUS_CHECK_DISABLE 1
 
+#ifdef CONFIG_MACH_XIAOMI_VINCE
 uint32_t ESD_interval = STATUS_CHECK_INTERVAL_MS;
+#define interval ESD_interval
+#else
+static uint32_t interval = STATUS_CHECK_INTERVAL_MS;
+#endif
 static int32_t dsi_status_disable = DSI_STATUS_CHECK_INIT;
 struct dsi_status_data *pstatus_data;
 
@@ -72,7 +77,7 @@ static void check_dsi_ctrl_status(struct work_struct *work)
 		return;
 	}
 
-	pdsi_status->mfd->mdp.check_dsi_status(work, ESD_interval);
+	pdsi_status->mfd->mdp.check_dsi_status(work, interval);
 }
 
 /*
@@ -95,7 +100,7 @@ irqreturn_t hw_vsync_handler(int irq, void *data)
 
 	if (pstatus_data)
 		mod_delayed_work(system_wq, &pstatus_data->check_status,
-			msecs_to_jiffies(ESD_interval));
+			msecs_to_jiffies(interval));
 	else
 		pr_err("Pstatus data is NULL\n");
 
@@ -180,7 +185,7 @@ static int fb_event_callback(struct notifier_block *self,
 		switch (*blank) {
 		case FB_BLANK_UNBLANK:
 			schedule_delayed_work(&pdata->check_status,
-				msecs_to_jiffies(ESD_interval));
+				msecs_to_jiffies(interval));
 			break;
 		case FB_BLANK_VSYNC_SUSPEND:
 		case FB_BLANK_NORMAL:
@@ -252,7 +257,7 @@ int __init mdss_dsi_status_init(void)
 		return -EPERM;
 	}
 
-	pr_info("%s: DSI status check interval:%d\n", __func__,	ESD_interval);
+	pr_info("%s: DSI status check interval:%d\n", __func__,	interval);
 
 	INIT_DELAYED_WORK(&pstatus_data->check_status, check_dsi_ctrl_status);
 
@@ -269,9 +274,9 @@ void __exit mdss_dsi_status_exit(void)
 	pr_debug("%s: DSI ctrl status work queue removed\n", __func__);
 }
 
-module_param_call(ESD_interval, param_set_interval, param_get_uint,
-						&ESD_interval, 0644);
-MODULE_PARM_DESC(ESD_interval,
+module_param_call(interval, param_set_interval, param_get_uint,
+						&interval, 0644);
+MODULE_PARM_DESC(interval,
 	"Duration in milliseconds to send BTA command for DSI status check");
 
 module_param_call(dsi_status_disable, param_dsi_status_disable, param_get_uint,

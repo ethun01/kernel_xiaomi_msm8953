@@ -298,8 +298,18 @@ static ssize_t idle_store(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
 	int index;
+	char mode_buf[8];
+	ssize_t sz;
 
-	if (!sysfs_streq(buf, "all"))
+	sz = strscpy(mode_buf, buf, sizeof(mode_buf));
+	if (sz <= 0)
+		return -EINVAL;
+
+	/* ignore trailing new line */
+	if (mode_buf[sz - 1] == '\n')
+		mode_buf[sz - 1] = 0x00;
+
+	if (strcmp(mode_buf, "all"))
 		return -EINVAL;
 
 	down_read(&zram->init_lock);
@@ -502,12 +512,6 @@ static ssize_t backing_dev_store(struct device *dev,
 	}
 
 	nr_pages = i_size_read(inode) >> PAGE_SHIFT;
-	/* Refuse to use zero sized device (also prevents self reference) */
-	if (!nr_pages) {
-		err = -EINVAL;
-		goto out;
-	}
-
 	bitmap_sz = BITS_TO_LONGS(nr_pages) * sizeof(long);
 	kmalloc_flags = GFP_KERNEL | __GFP_ZERO;
 	if (bitmap_sz > PAGE_SIZE)
@@ -621,42 +625,37 @@ static int read_from_bdev_async(struct zram *zram, struct bio_vec *bvec,
 	return 1;
 }
 
-#define PAGE_WB_SIG "page_index="
-
-#define PAGE_WRITEBACK 0
-#define HUGE_WRITEBACK (1<<0)
-#define IDLE_WRITEBACK (1<<1)
-
+#define HUGE_WRITEBACK 1
+#define IDLE_WRITEBACK 2
 
 static ssize_t writeback_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
-	unsigned long index = 0;
+	unsigned long index;
 	struct bio bio;
 	struct page *page;
-	ssize_t ret;
-	int mode, err;
+	ssize_t ret, sz;
+	char mode_buf[8];
+	int mode = -1;
 	unsigned long blk_idx = 0;
 
-	if (sysfs_streq(buf, "idle"))
+	sz = strscpy(mode_buf, buf, sizeof(mode_buf));
+	if (sz <= 0)
+		return -EINVAL;
+
+	/* ignore trailing newline */
+	if (mode_buf[sz - 1] == '\n')
+		mode_buf[sz - 1] = 0x00;
+
+	if (!strcmp(mode_buf, "idle"))
 		mode = IDLE_WRITEBACK;
-	else if (sysfs_streq(buf, "huge"))
+	else if (!strcmp(mode_buf, "huge"))
 		mode = HUGE_WRITEBACK;
-	else if (sysfs_streq(buf, "huge_idle"))
-		mode = IDLE_WRITEBACK | HUGE_WRITEBACK;
-	else {
-		if (strncmp(buf, PAGE_WB_SIG, sizeof(PAGE_WB_SIG) - 1))
-			return -EINVAL;
 
-		if (kstrtol(buf + sizeof(PAGE_WB_SIG) - 1, 10, &index) ||
-				index >= nr_pages)
-			return -EINVAL;
-
-		nr_pages = 1;
-		mode = PAGE_WRITEBACK;
-	}
+	if (mode == -1)
+		return -EINVAL;
 
 	down_read(&zram->init_lock);
 	if (!init_done(zram)) {
@@ -675,7 +674,7 @@ static ssize_t writeback_store(struct device *dev,
 		goto release_init_lock;
 	}
 
-	for (; nr_pages != 0; index++, nr_pages--) {
+	for (index = 0; index < nr_pages; index++) {
 		struct bio_vec bvec;
 
 		bvec.bv_page = page;
@@ -707,10 +706,10 @@ static ssize_t writeback_store(struct device *dev,
 				zram_test_flag(zram, index, ZRAM_UNDER_WB))
 			goto next;
 
-		if (mode & IDLE_WRITEBACK &&
+		if (mode == IDLE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_IDLE))
 			goto next;
-		if (mode & HUGE_WRITEBACK &&
+		if (mode == HUGE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_HUGE))
 			goto next;
 		/*
@@ -743,17 +742,12 @@ static ssize_t writeback_store(struct device *dev,
 		 * XXX: A single page IO would be inefficient for write
 		 * but it would be not bad as starter.
 		 */
-		err = submit_bio_wait(&bio);
-		if (err) {
+		ret = submit_bio_wait(&bio);
+		if (ret) {
 			zram_slot_lock(zram, index);
 			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
 			zram_clear_flag(zram, index, ZRAM_IDLE);
 			zram_slot_unlock(zram, index);
-			/*
-			 * Return last IO error unless every IO were
-			 * not suceeded.
-			 */
-			ret = err;
 			continue;
 		}
 
@@ -1742,14 +1736,9 @@ static ssize_t disksize_store(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 	int err;
 
-#ifndef CONFIG_ZRAM_SIZE_OVERRIDE
 	disksize = memparse(buf, NULL);
 	if (!disksize)
 		return -EINVAL;
-#else
-	disksize = (u64)SZ_1M * CONFIG_ZRAM_SIZE_OVERRIDE;
-	pr_info("Overriding zram size to %llu", disksize);
-#endif
 
 	down_write(&zram->init_lock);
 	if (init_done(zram)) {

@@ -31,8 +31,8 @@
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
-#include <linux/string.h>
 #include "leds.h"
+
 #define FLASH_LED_PERIPHERAL_SUBTYPE(base)			(base + 0x05)
 #define FLASH_SAFETY_TIMER(base)				(base + 0x40)
 #define FLASH_MAX_CURRENT(base)					(base + 0x41)
@@ -1268,7 +1268,9 @@ static void qpnp_flash_led_work(struct work_struct *work)
 	int rc, brightness = flash_node->cdev.brightness;
 	int max_curr_avail_ma = 0;
 	int total_curr_ma = 0;
+#if !((defined CONFIG_MACH_XIAOMI_SAKURA) || (defined CONFIG_MACH_XIAOMI_DAISY))
 	int i;
+#endif
 	u8 val = 0;
 	uint temp;
 
@@ -1336,18 +1338,6 @@ static void qpnp_flash_led_work(struct work_struct *work)
 					"INT_LATCHED_CLR write failed\n");
 			goto exit_flash_led_work;
 		}
-	}
-
-	if (led->flash_node[led->num_leds - 1].id == FLASH_LED_SWITCH &&
-					flash_node->id != FLASH_LED_SWITCH) {
-		led->flash_node[led->num_leds - 1].trigger |=
-						(0x80 >> flash_node->id);
-		if (flash_node->id == FLASH_LED_0)
-			led->flash_node[led->num_leds - 1].prgm_current =
-						flash_node->prgm_current;
-		else if (flash_node->id == FLASH_LED_1)
-			led->flash_node[led->num_leds - 1].prgm_current2 =
-						flash_node->prgm_current;
 	}
 
 	if (led->flash_node[led->num_leds - 1].id == FLASH_LED_SWITCH &&
@@ -1746,12 +1736,15 @@ static void qpnp_flash_led_work(struct work_struct *work)
 			}
 			led->fault_reg = temp;
 		}
-	} else {
+	}
+#if !((defined CONFIG_MACH_XIAOMI_SAKURA) || (defined CONFIG_MACH_XIAOMI_DAISY))
+	else {
 		pr_err("Both Torch and Flash cannot be select at same time\n");
 		for (i = 0; i < led->num_leds; i++)
 			led->flash_node[i].flash_on = false;
 		goto turn_off;
 	}
+#endif
 
 	flash_node->flash_on = true;
 	mutex_unlock(&led->flash_led_lock);
@@ -1759,10 +1752,6 @@ static void qpnp_flash_led_work(struct work_struct *work)
 	return;
 
 turn_off:
-	if (led->flash_node[led->num_leds - 1].id == FLASH_LED_SWITCH &&
-					flash_node->id != FLASH_LED_SWITCH)
-		led->flash_node[led->num_leds - 1].trigger &=
-						~(0x80 >> flash_node->id);
 	if (led->flash_node[led->num_leds - 1].id == FLASH_LED_SWITCH &&
 					flash_node->id != FLASH_LED_SWITCH)
 		led->flash_node[led->num_leds - 1].trigger &=
@@ -1876,6 +1865,11 @@ static void qpnp_flash_led_brightness_set(struct led_classdev *led_cdev,
 
 			flash_node->prgm_current = value;
 			flash_node->flash_on = value ? true : false;
+		} else if (flash_node->id == FLASH_LED_SWITCH) {
+			if (!value) {
+				flash_node->prgm_current = 0;
+				flash_node->prgm_current2 = 0;
+			}
 		}
 	} else {
 		if (value < FLASH_LED_MIN_CURRENT_MA && value != 0)

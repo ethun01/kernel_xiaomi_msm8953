@@ -375,10 +375,6 @@ static bool boost_fuse[MAX_BOOST_CONFIG_FUSE_VALUE] = {0, 1, 1, 1, 1, 1, 1, 1};
 /* Use a very high value for max aging margin to be applied */
 #define MSM8953_APSS_AGING_MAX_AGE_MARGIN_QUOT	(-1000)
 
-/* For safety, the "custom voltage reduce" and "custom voltage increase" must <= 160mV */
-#define CUSTOM_VOLTAGE_REDUCE_LIMIT 160000
-#define CUSTOM_VOLTAGE_INCREASE_LIMIT 160000
-
 /*
  * SOC IDs
  */
@@ -617,9 +613,6 @@ static int cpr4_apss_read_fuse_data(struct cpr3_regulator *vreg)
 
 	rc = cpr3_read_fuse_param(base, msm8953_apss_speed_bin_param,
 				&fuse->speed_bin);
-	#ifdef CONFIG_MACH_XIAOMI_CLK_MOD
-	fuse->speed_bin = 7;
-	#endif
 	if (rc) {
 		cpr3_err(vreg, "Unable to read speed bin fuse, rc=%d\n", rc);
 		return rc;
@@ -627,9 +620,6 @@ static int cpr4_apss_read_fuse_data(struct cpr3_regulator *vreg)
 
 	rc = cpr3_read_fuse_param(base, msm8953_cpr_fusing_rev_param,
 				&fuse->cpr_fusing_rev);
-	#ifdef CONFIG_MACH_XIAOMI_CLK_MOD
-	fuse->cpr_fusing_rev = 3;
-	#endif
 	if (rc) {
 		cpr3_err(vreg, "Unable to read CPR fusing revision fuse, rc=%d\n",
 			rc);
@@ -638,9 +628,6 @@ static int cpr4_apss_read_fuse_data(struct cpr3_regulator *vreg)
 
 	rc = cpr3_read_fuse_param(base, msm8953_apss_foundry_id_param,
 				&fuse->foundry_id);
-	#ifdef CONFIG_MACH_XIAOMI_CLK_MOD
-	fuse->foundry_id = 1;
-	#endif
 	if (rc) {
 		cpr3_err(vreg, "Unable to read foundry id fuse, rc=%d\n", rc);
 		return rc;
@@ -800,8 +787,6 @@ static int cpr4_apss_calculate_open_loop_voltages(struct cpr3_regulator *vreg)
 	int *fmax_corner;
 	const char * const *corner_name;
 	enum soc_id soc_revision;
-	u32 custom_voltage_reduce;
-	u32 custom_voltage_increase;
 
 	fuse_volt = kcalloc(vreg->fuse_corner_count, sizeof(*fuse_volt),
 				GFP_KERNEL);
@@ -833,52 +818,10 @@ static int cpr4_apss_calculate_open_loop_voltages(struct cpr3_regulator *vreg)
 		goto done;
 	}
 
-	/* Read custom-voltage-reduce value from device tree node */
-	rc = of_property_read_u32(node, "qcom,custom-voltage-reduce", &custom_voltage_reduce);
-
-	if (rc < 0)
-		custom_voltage_reduce = 0;
-	else if (custom_voltage_reduce > CUSTOM_VOLTAGE_REDUCE_LIMIT)
-		custom_voltage_reduce = CUSTOM_VOLTAGE_REDUCE_LIMIT;
-
-	/* Read custom-voltage-increase value from device tree node */
-	rc = of_property_read_u32(node, "qcom,custom-voltage-increase", &custom_voltage_increase);
-
-	if (rc < 0)
-    		custom_voltage_increase = 0;
-	else if (custom_voltage_increase > CUSTOM_VOLTAGE_INCREASE_LIMIT)
-		custom_voltage_increase = CUSTOM_VOLTAGE_INCREASE_LIMIT;
-
-	cpr3_info(vreg, "custom voltage reduce: %d uV\n", custom_voltage_reduce);
-	cpr3_info(vreg, "custom voltage increase: %d uV\n", custom_voltage_increase);
-
 	for (i = 0; i < vreg->fuse_corner_count; i++) {
-		int adjusted_voltage = ref_volt[i] - custom_voltage_reduce + custom_voltage_increase;
-		fuse_volt[i] = cpr3_convert_open_loop_voltage_fuse(adjusted_voltage,
+		fuse_volt[i] = cpr3_convert_open_loop_voltage_fuse(ref_volt[i],
 			CPR4_APSS_FUSE_STEP_VOLT, fuse->init_voltage[i],
 			CPR4_APSS_VOLTAGE_FUSE_SIZE);
-
-		/* Log before applyimg custom voltages */
-		if (custom_voltage_increase != 0 || custom_voltage_reduce != 0) {
-		cpr3_info(vreg, "Before applying custom voltages: %8s: floor_volt=%7d uV, ceiling_volt=%7d uV\n",
-				corner_name[i], vreg->corner[i].floor_volt, vreg->corner[i].ceiling_volt);
-		}
-
-		/*
-		 * Adjust both floor and ceiling voltages.
-		 * Subtract the custom voltage reduction from the reference voltage.
-		 * Add the custom voltage increase to the resulting voltage.
-		 */
-		vreg->corner[i].floor_volt -= custom_voltage_reduce;
-		vreg->corner[i].floor_volt += custom_voltage_increase;
-		vreg->corner[i].ceiling_volt -= custom_voltage_reduce;
-		vreg->corner[i].ceiling_volt += custom_voltage_increase;
-
-		/* Log voltages after applying custom voltages */
-		if (custom_voltage_increase != 0 || custom_voltage_reduce != 0) {
-		cpr3_info(vreg, "after custom voltage: %8s: floor_volt=%7d uV, ceiling_volt=%7d uV\n",
-				corner_name[i], vreg->corner[i].floor_volt, vreg->corner[i].ceiling_volt);
-		}
 
 		/* Log fused open-loop voltage values for debugging purposes. */
 		cpr3_info(vreg, "fused %8s: open-loop=%7d uV\n", corner_name[i],

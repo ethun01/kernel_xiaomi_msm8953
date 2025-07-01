@@ -1,5 +1,5 @@
 /* Copyright (c) 2008-2018,2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,9 +34,6 @@
 
 #define DEVICE_3D_NAME "kgsl-3d"
 #define DEVICE_3D0_NAME "kgsl-3d0"
-
-/* Index to preemption scratch buffer to store KMD postamble */
-#define KMD_POSTAMBLE_IDX 100
 
 /* ADRENO_DEVICE - Given a kgsl_device return the adreno device struct */
 #define ADRENO_DEVICE(device) \
@@ -1897,14 +1894,12 @@ static inline unsigned int counter_delta(struct kgsl_device *device,
 			 * Since KGSL got abnormal value from the counter,
 			 * We will drop the value from being accumulated.
 			 */
-			#if 0
 			KGSL_DRV_ERR_RATELIMIT(device,
 				"Abnormal value:0x%llx (0x%llx) from perf counter : 0x%x\n",
 				val | ((uint64_t)perfctr_pwr_hi << 32),
 				*counter |
 					((uint64_t)prev_perfctr_pwr_hi << 32),
 				reg);
-			#endif
 		}
 	}
 

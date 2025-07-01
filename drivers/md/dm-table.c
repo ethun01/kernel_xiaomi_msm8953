@@ -186,12 +186,7 @@ static int alloc_targets(struct dm_table *t, unsigned int num)
 int dm_table_create(struct dm_table **result, fmode_t mode,
 		    unsigned num_targets, struct mapped_device *md)
 {
-	struct dm_table *t;
-
-	if (num_targets > DM_MAX_TARGETS)
-		return -EOVERFLOW;
-
-	t = kzalloc(sizeof(*t), GFP_KERNEL);
+	struct dm_table *t = kzalloc(sizeof(*t), GFP_KERNEL);
 
 	if (!t)
 		return -ENOMEM;
@@ -206,7 +201,7 @@ int dm_table_create(struct dm_table **result, fmode_t mode,
 
 	if (!num_targets) {
 		kfree(t);
-		return -EOVERFLOW;
+		return -ENOMEM;
 	}
 
 	if (alloc_targets(t, num_targets)) {
@@ -1546,10 +1541,10 @@ static int queue_no_sg_merge(struct dm_target *ti, struct dm_dev *dev,
 	return q && test_bit(QUEUE_FLAG_NO_SG_MERGE, &q->queue_flags);
 }
 
-static int queue_no_inline_encryption(struct dm_target *ti,
-				      struct dm_dev *dev,
-				      sector_t start, sector_t len,
-				      void *data)
+static int queue_not_inline_encryption_capable(struct dm_target *ti,
+						struct dm_dev *dev,
+						sector_t start, sector_t len,
+						void *data)
 {
 	struct request_queue *q = bdev_get_queue(dev->bdev);
 
@@ -1620,6 +1615,22 @@ static bool dm_table_supports_discards(struct dm_table *t)
 	return false;
 }
 
+static bool dm_table_supports_inlinecrypt(struct dm_table *t)
+{
+	struct dm_target *ti;
+	unsigned i = 0;
+
+	while (i < dm_table_get_num_targets(t)) {
+		ti = dm_table_get_target(t, i++);
+
+		if (!ti->type->iterate_devices ||
+		    ti->type->iterate_devices(ti,
+		    queue_not_inline_encryption_capable, NULL))
+			return false;
+	}
+	return true;
+}
+
 void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 			       struct queue_limits *limits)
 {
@@ -1659,10 +1670,10 @@ void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 	else
 		queue_flag_clear_unlocked(QUEUE_FLAG_NO_SG_MERGE, q);
 
-	if (dm_table_any_dev_attr(t, queue_no_inline_encryption))
-		queue_flag_clear_unlocked(QUEUE_FLAG_INLINECRYPT, q);
-	else
+	if (dm_table_supports_inlinecrypt(t))
 		queue_flag_set_unlocked(QUEUE_FLAG_INLINECRYPT, q);
+	else
+		queue_flag_clear_unlocked(QUEUE_FLAG_INLINECRYPT, q);
 
 	dm_table_verify_integrity(t);
 

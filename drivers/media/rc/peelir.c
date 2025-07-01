@@ -1,5 +1,6 @@
 /*
 * Copyright (C) 2014  Peel Technologies Inc
+* Copyright (C) 2020 XiaoMi, Inc.
 */
 
 #include <linux/init.h>
@@ -31,12 +32,12 @@
 #include <asm/uaccess.h>
 #include <asm/delay.h>
 
-#define SPI_MODE_MASK		(SPI_CPHA | SPI_CPOL | SPI_CS_HIGH \
+#define SPI_MODE_MASK       (SPI_CPHA | SPI_CPOL | SPI_CS_HIGH \
 				| SPI_LSB_FIRST | SPI_3WIRE | SPI_LOOP \
 				| SPI_NO_CS | SPI_READY)
 
 #ifndef CONFIG_OF
-#define LR_EN		73
+#define LR_EN       73
 #endif
 
 #define TRACE printk("@@@@ %s, %d\n", __func__, __LINE__);
@@ -45,12 +46,12 @@
 for write*/
 #define USES_MMAP
 struct peelir_data {
-	dev_t			devt;
-	struct spi_device	*spi;
-	struct mutex		buf_lock;
-	spinlock_t		spi_lock;
-	unsigned		users;
-	u8			*buffer;
+    dev_t           devt;
+    struct spi_device   *spi;
+    struct mutex        buf_lock;
+    spinlock_t      spi_lock;
+    unsigned        users;
+    u8          *buffer;
 };
 
 /*npages gets its value from the makefile
@@ -78,7 +79,7 @@ static struct spi_transfer t;
 
 static int ir_regulator_set(bool enable)
 {
-	int rc = 0;
+    int rc = 0;
 #ifdef CONFIG_OF
 	if (ir_reg) {
 		if (enable) {
@@ -96,10 +97,10 @@ static int ir_regulator_set(bool enable)
 static inline int
 peelir_read(struct peelir_data *peelir, size_t len)
 {
-	struct spi_message	m;
-	t.rx_buf	= peelir->buffer;
-	t.len		= len;
-	t.tx_buf 	= NULL;
+	struct spi_message  m;
+	t.rx_buf    = peelir->buffer;
+	t.len       = len;
+	t.tx_buf    = NULL;
 	memset(peelir->buffer, 0, len); TRACE
 	spi_message_init(&m);
 	spi_message_add_tail(&t, &m);
@@ -109,9 +110,9 @@ peelir_read(struct peelir_data *peelir, size_t len)
 static int peelir_read_message(struct peelir_data *peelir,
 		struct spi_ioc_transfer *u_xfers)
 {
-	u8			*buf;
+	u8          *buf;
 
-	memset(peelir->buffer, 0, bufsiz);	/*Receive Buffer*/
+	memset(peelir->buffer, 0, bufsiz);  /*Receive Buffer*/
 
 	buf = peelir->buffer; TRACE
 	if (u_xfers->len > bufsiz) {
@@ -144,9 +145,9 @@ peelir_write(struct peelir_data *peelir, size_t len)
 {
 	struct spi_message m;
 
-	t.tx_buf		= peelir->buffer;
-	t.len			= len;
-	t.bits_per_word		= peelir->spi->bits_per_word;
+	t.tx_buf        = peelir->buffer;
+	t.len           = len;
+	t.bits_per_word     = peelir->spi->bits_per_word;
 	spi_message_init(&m); TRACE
 	spi_message_add_tail(&t, &m);
 	return spi_sync(peelir->spi, &m);
@@ -165,8 +166,8 @@ static int peelir_write_message(struct peelir_data *peelir,
 
 	if (u_xfers->tx_buf)
 		if (copy_from_user(buf, (const u8 __user *)
-					(uintptr_t) u_xfers->tx_buf,
-					u_xfers->len))
+			(uintptr_t) u_xfers->tx_buf,
+			u_xfers->len))
 
 	peelir->spi->bits_per_word = u_xfers->bits_per_word;
 
@@ -177,9 +178,9 @@ static int peelir_write_message(struct peelir_data *peelir,
 static long
 peelir_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	int			retval = 0;
-	struct peelir_data	*peelir;
-	struct spi_ioc_transfer	*ioc;
+	int         retval = 0;
+	struct peelir_data  *peelir;
+	struct spi_ioc_transfer *ioc;
 	struct strIds *id;
 	int rc = 0;
 
@@ -190,7 +191,6 @@ peelir_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 	/* read ioctls */
-
 	case SPI_IOC_WR_MSG:
 		/* copy into scratch area */
 		ioc = kmalloc(sizeof(struct spi_ioc_transfer), GFP_KERNEL);
@@ -220,7 +220,7 @@ peelir_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case SPI_IOC_RD_MSG:
 		printk("%s: READ Invoked\n", __func__);
 		if (is_gpio_used)
-			gpio_set_value(lr_en, 1);	/* LR Enable high for Rx*/
+			gpio_set_value(lr_en, 1);   /* LR Enable high for Rx*/
 		/* copy into scratch area */
 		ioc = kmalloc(sizeof(struct spi_ioc_transfer), GFP_KERNEL);
 		if (!ioc) {
@@ -229,7 +229,7 @@ peelir_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			break;
 		}
 		if (__copy_from_user(ioc, (void __user *)arg,
-				sizeof(struct spi_ioc_transfer))) {
+			sizeof(struct spi_ioc_transfer))) {
 			pr_err("%s: Error performing copy from user of ioc\n",
 					__func__);
 			kfree(ioc);
@@ -243,7 +243,7 @@ peelir_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		ir_regulator_set(0);
 		if (is_gpio_used)
-			gpio_set_value(lr_en, 0);	/* LR Enable default state*/
+			gpio_set_value(lr_en, 0);   /* LR Enable default state*/
 		break;
 	case SPI_IOC_RD_IDS:
 		id = kmalloc(sizeof(struct strIds), GFP_KERNEL);
@@ -271,8 +271,8 @@ peelir_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 static int peelir_open(struct inode *inode, struct file *filp)
 {
-	struct peelir_data	*peelir;
-	int			status = 0;
+	struct peelir_data  *peelir;
+	int         status = 0;
 
 	peelir = peel_data_g; TRACE
 	if (in_use) {
@@ -300,7 +300,7 @@ static int peelir_open(struct inode *inode, struct file *filp)
 
 static int peelir_release(struct inode *inode, struct file *filp)
 {
-	int			status = 0;
+	int         status = 0;
 	in_use = 0; TRACE
 	peel_data_g->users = 0;
 	filp->private_data = NULL;
@@ -323,9 +323,9 @@ int peelir_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EIO;
 
 	ret = remap_pfn_range(vma, vma->vm_start,
-				virt_to_phys((void *)kmalloc_area) >> PAGE_SHIFT,
-				length,
-				vma->vm_page_prot);
+			virt_to_phys((void *)kmalloc_area) >> PAGE_SHIFT,
+			length,
+			vma->vm_page_prot);
 	if (ret < 0)
 		return ret;
 	return 0;
@@ -369,46 +369,46 @@ static struct attribute_group attr_group = {
 
 /*-------------------------------------------------------------------------*/
 static const struct file_operations peel_dev_fops = {
-	.owner			=	THIS_MODULE,
-	.open			=	peelir_open,
-	.release		=	peelir_release,
-	.unlocked_ioctl		=	peelir_ioctl,
-	.compat_ioctl		=	peelir_ioctl,
-	#ifdef USES_MMAP
-	.mmap		=	peelir_mmap,
-	#endif
+	.owner          =   THIS_MODULE,
+	.open           =   peelir_open,
+	.release        =   peelir_release,
+	.unlocked_ioctl     =   peelir_ioctl,
+	.compat_ioctl       =   peelir_ioctl,
+#ifdef USES_MMAP
+	.mmap       =   peelir_mmap,
+#endif
 };
 
 static struct miscdevice peel_dev_drv = {
-	.minor          =       MISC_DYNAMIC_MINOR,
-	.name           =       "peel_ir",
-	.fops           =       &peel_dev_fops,
-	.nodename       =       "peel_ir",
-	.mode           =       0666
+    .minor          =       MISC_DYNAMIC_MINOR,
+    .name           =       "peel_ir",
+    .fops           =       &peel_dev_fops,
+    .nodename       =       "peel_ir",
+    .mode           =       0666
 };
 
 static int peelir_probe(struct spi_device *spi)
 {
-	struct peelir_data	*peelir;
-	int			status;
+    struct peelir_data  *peelir;
+    int         status;
 
-	struct device_node *np = spi->dev.of_node;
-	#ifdef CONFIG_OF
-	u32 bpw, mode; TRACE
-	#endif
-	/* Allocate driver data */
-	peelir = kzalloc(sizeof(*peelir), GFP_KERNEL);
-	if (!peelir)
+    struct device_node *np = spi->dev.of_node;
+    #ifdef CONFIG_OF
+    u32 bpw, mode; TRACE
+    #endif
+    /* Allocate driver data */
+    peelir = kzalloc(sizeof(*peelir), GFP_KERNEL);
+    if (!peelir)
 		return -ENOMEM;
 
-	/* Initialize the driver data */
+    /* Initialize the driver data */
 	peelir->spi = spi;
 	spin_lock_init(&peelir->spi_lock);
 	mutex_init(&peelir->buf_lock);
 	spi_set_drvdata(spi, peelir);
 	peel_data_g = peelir;
 	in_use = 0;
-	#ifdef CONFIG_OF
+#ifdef CONFIG_OF
 	of_property_read_u32(np, "peel_ir,spi-bpw", &bpw); TRACE
 	of_property_read_u32(np, "peel_ir,spi-clk-speed", &spi->max_speed_hz);
 	of_property_read_u32(np, "peel_ir,spi-mode", &mode);
@@ -426,12 +426,12 @@ static int peelir_probe(struct spi_device *spi)
 	printk("%s: lr-gpio-valid = %d\n", __func__, is_gpio_used);
 	spi->bits_per_word = (u8)bpw;
 	spi->mode = (u8)mode;
-	#else
+#else
 	lr_en = LR_EN; TRACE
 	spi->bits_per_word = bpw;
 	spi->max_speed_hz = spi_clk_freq;
 	is_gpio_used = 1;
-	#endif
+#endif
 	printk("%s:lr_en = %d\n", __func__, lr_en);
 	if (is_gpio_used) {
 		if (gpio_is_valid(lr_en)) {
@@ -439,7 +439,7 @@ static int peelir_probe(struct spi_device *spi)
 			status = gpio_request(lr_en, "lr_enable");
 			if (status) {
 				printk("unable to request gpio [%d]: %d\n",
-					 lr_en, status);
+					lr_en, status);
 			}
 			status = gpio_direction_output(lr_en, 0);
 			if (status) {
@@ -447,8 +447,8 @@ static int peelir_probe(struct spi_device *spi)
 					lr_en, status);
 			}
 			gpio_set_value(lr_en, 0);
-		} else
-			printk("gpio %d is not valid \n", lr_en);
+	} else
+		printk("gpio %d is not valid \n", lr_en);
 	}
 	misc_register(&peel_dev_drv);
 	/* sysfs entry */
@@ -461,73 +461,73 @@ static int peelir_probe(struct spi_device *spi)
 
 static int peelir_remove(struct spi_device *spi)
 {
-	struct peelir_data	*peelir = spi_get_drvdata(spi);
+    struct peelir_data  *peelir = spi_get_drvdata(spi);
 
-	sysfs_remove_group(&spi->dev.kobj, &attr_group); TRACE
+    sysfs_remove_group(&spi->dev.kobj, &attr_group); TRACE
 
-	/* make sure ops on existing fds can abort cleanly */
-	spin_lock_irq(&peelir->spi_lock);
-	peelir->spi = NULL;
-	spi_set_drvdata(spi, NULL);
-	spin_unlock_irq(&peelir->spi_lock);
+    /* make sure ops on existing fds can abort cleanly */
+    spin_lock_irq(&peelir->spi_lock);
+    peelir->spi = NULL;
+    spi_set_drvdata(spi, NULL);
+    spin_unlock_irq(&peelir->spi_lock);
 
-	/* prevent opening a new instance of the device
-	   during the removal of the device
-	 */
-	if (peelir->users == 0) {
+    /* prevent opening a new instance of the device
+       during the removal of the device
+     */
+    if (peelir->users == 0) {
 		kfree(peelir);
 		kfree(p_buf);
-	} else {
+    } else {
 		return -EBUSY;
-	}
+    }
 
-	return 0;
+    return 0;
 }
 #ifdef CONFIG_OF
 static const struct of_device_id peel_of_match[] = {
-	{.compatible = "peel_ir"},
+    {.compatible = "peel_ir"},
 };
 MODULE_DEVICE_TABLE(of, peel_of_match);
 #endif
 static struct spi_driver peelir_spi_driver = {
-	.driver = {
-		.name		=	"peel_ir",
-		.owner		=	THIS_MODULE,
-		#ifdef CONFIG_OF
-		.of_match_table =	peel_of_match,
-		#endif
+    .driver = {
+		.name       =   "peel_ir",
+		.owner      =   THIS_MODULE,
+#ifdef CONFIG_OF
+		.of_match_table =   peel_of_match,
+#endif
 	},
-	.probe =	peelir_probe,
-	.remove =	peelir_remove,
+	.probe =    peelir_probe,
+	.remove =   peelir_remove,
 
-	/* NOTE:  suspend/resume methods are not necessary here.
-	 * We don't do anything except pass the requests to/from
-	 * the underlying controller.  The refrigerator handles
-	 * most issues; the controller driver handles the rest.
-	 */
+    /* NOTE:  suspend/resume methods are not necessary here.
+     * We don't do anything except pass the requests to/from
+     * the underlying controller.  The refrigerator handles
+     * most issues; the controller driver handles the rest.
+     */
 };
 
 /*-------------------------------------------------------------------------*/
 
 static int __init peelir_init(void)
 {
-	int status;
-	printk("%s:npages = %u\n", __func__, npages);
-	bufsiz = npages * PAGE_SIZE;
-	if (bufsiz % PAGE_SIZE) {
+    int status;
+    printk("%s:npages = %u\n", __func__, npages);
+    bufsiz = npages * PAGE_SIZE;
+    if (bufsiz % PAGE_SIZE) {
 		printk("%s:buffer size not aligned to page\n", __func__);
 		return -EINVAL;
-	}
-	p_buf = kzalloc(bufsiz, GFP_KERNEL|GFP_ATOMIC);
-	if (p_buf == NULL)
+    }
+    p_buf = kzalloc(bufsiz, GFP_KERNEL|GFP_ATOMIC);
+    if (p_buf == NULL)
 		return -ENOMEM;
-	#ifdef USES_MMAP
+    #ifdef USES_MMAP
 	kmalloc_ptr = p_buf;
 	kmalloc_area = (int *)((((unsigned long)kmalloc_ptr) +
 			PAGE_SIZE - 1) & PAGE_MASK);
-	#endif
-	status = spi_register_driver(&peelir_spi_driver);
-	if (status < 0 || p_buf == NULL) {
+    #endif
+    status = spi_register_driver(&peelir_spi_driver);
+    if (status < 0 || p_buf == NULL) {
 		printk("%s: Error registerign peel driver\n", __func__);
 		return -ENODEV;
 	}

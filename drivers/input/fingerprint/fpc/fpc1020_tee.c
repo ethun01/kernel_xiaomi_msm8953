@@ -571,12 +571,6 @@ static const struct attribute_group attribute_group = {
 	.attrs = attributes,
 };
 
-static void notification_work(struct work_struct *work)
-{
-	mdss_prim_panel_fb_unblank(FP_UNLOCK_REJECTION_TIMEOUT);
-	printk("unblank\n");
-}
-
 static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 {
 	struct fpc1020_data *fpc1020 = handle;
@@ -584,15 +578,14 @@ static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 	dev_err(fpc1020->dev, "%s\n", __func__);
 
 	if (atomic_read(&fpc1020->wakeup_enabled)) {
-		__pm_wakeup_event(&fpc1020->ttw_wl,
-					msecs_to_jiffies(FPC_TTW_HOLD_TIME));
+		__pm_wakeup_event(&fpc1020->ttw_wl, FPC_TTW_HOLD_TIME);
 	}
 
 	sysfs_notify(&fpc1020->dev->kobj, NULL, dev_attr_irq.attr.name);
 	if (fpc1020->wait_finger_down && fpc1020->fb_black) {
 		printk("%s enter\n", __func__);
 		fpc1020->wait_finger_down = false;
-		schedule_work(&fpc1020->work);
+		// schedule_work(&fpc1020->work);
 	}
 
 	return IRQ_HANDLED;
@@ -699,7 +692,6 @@ static int fpc1020_probe(struct platform_device *pdev)
 	dev_err(dev, "%s: ok\n", __func__);
 	fpc1020->fb_black = false;
 	fpc1020->wait_finger_down = false;
-	INIT_WORK(&fpc1020->work, notification_work);
 	fpc1020->fb_notifier = fpc_notif_block;
 	fb_register_client(&fpc1020->fb_notifier);
 

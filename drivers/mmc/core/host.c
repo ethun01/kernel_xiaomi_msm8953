@@ -393,12 +393,13 @@ EXPORT_SYMBOL(mmc_retune_enable);
 
 /*
  * Pause re-tuning for a small set of operations.  The pause begins after the
- * next command.
+ * next command and after first doing re-tuning.
  */
 void mmc_retune_pause(struct mmc_host *host)
 {
 	if (!host->retune_paused) {
 		host->retune_paused = 1;
+		mmc_retune_needed(host);
 		mmc_retune_hold(host);
 	}
 }
@@ -1058,7 +1059,6 @@ EXPORT_SYMBOL(mmc_remove_host);
  */
 void mmc_free_host(struct mmc_host *host)
 {
-	cancel_delayed_work_sync(&host->detect);
 	mmc_pwrseq_free(host);
 	put_device(&host->class_dev);
 }

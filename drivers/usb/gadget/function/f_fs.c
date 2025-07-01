@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/uio.h>
 #include <linux/ipc_logging.h>
+#include <linux/freezer.h>
 #include <asm/unaligned.h>
 
 #include <linux/usb/composite.h>
@@ -1036,7 +1037,7 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 		 * and wait for next epfile open to happen
 		 */
 		if (!atomic_read(&epfile->error)) {
-			ret = wait_event_interruptible(epfile->wait,
+			ret = wait_event_freezable(epfile->wait,
 					(ep = epfile->ep));
 			if (ret < 0)
 				return -EINTR;
@@ -2085,7 +2086,7 @@ static int functionfs_bind(struct ffs_data *ffs, struct usb_composite_dev *cdev)
 	ffs_log("enter: state %d setup_state %d flag %lu", ffs->state,
 		ffs->setup_state, ffs->flags);
 
-	if ((ffs->state != FFS_ACTIVE
+	if (WARN_ON(ffs->state != FFS_ACTIVE
 		 || test_and_set_bit(FFS_FL_BOUND, &ffs->flags)))
 		return -EBADFD;
 

@@ -71,7 +71,7 @@
 static int enable_lmk = 1;
 module_param_named(enable_lmk, enable_lmk, int, 0644);
 
-static u32 lowmem_debug_level = 0;
+static u32 lowmem_debug_level = 1;
 static short lowmem_adj[6] = {
 	0,
 	1,
@@ -810,6 +810,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 
 		lowmem_deathpending_timeout = jiffies + HZ;
 		rem += selected_tasksize;
+
 		rcu_read_unlock();
 		/* give the system time to free up the memory */
 		msleep_interruptible(20);

@@ -60,7 +60,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Unknown", "Good", "Overheat", "Dead", "Over voltage",
 		"Unspecified failure", "Cold", "Watchdog timer expire",
 		"Safety timer expire",
-		"Warm", "Cool", "Hot"
+		"Warm", "Cool", "Hot", "cool_xiaomi"
 	};
 	static char *technology_text[] = {
 		"Unknown", "NiMH", "Li-ion", "Li-poly", "LiFe", "NiCd",
@@ -95,8 +95,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 
 		if (ret < 0) {
 			if (ret == -ENODATA)
-				dev_dbg_ratelimited(dev,
-					"driver has no data for `%s' property\n",
+				dev_dbg(dev, "driver has no data for `%s' property\n",
 					attr->attr.name);
 			else if (ret != -ENODEV && ret != -EAGAIN)
 				dev_err_ratelimited(dev,

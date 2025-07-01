@@ -1,5 +1,5 @@
 /* Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,6 +29,7 @@
 #include "adreno_trace.h"
 
 #include "a3xx_reg.h"
+#include "a6xx_reg.h"
 #include "adreno_a5xx.h"
 
 #define RB_HOSTPTR(_rb, _pos) \
@@ -350,11 +351,12 @@ int adreno_ringbuffer_probe(struct adreno_device *adreno_dev, bool nopreempt)
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	int i;
+	unsigned int priv = KGSL_MEMDESC_RANDOM | KGSL_MEMDESC_PRIVILEGED;
 	int status = -ENOMEM;
 
 	if (!adreno_is_a3xx(adreno_dev)) {
 		status = kgsl_allocate_global(device, &device->scratch,
-				PAGE_SIZE, 0, KGSL_MEMDESC_RANDOM, "scratch");
+				PAGE_SIZE, 0, priv, "scratch");
 		if (status != 0)
 			return status;
 	}
@@ -810,6 +812,8 @@ adreno_ringbuffer_issue_internal_cmds(struct adreno_ringbuffer *rb,
 		sizedwords, 0, NULL);
 }
 
+
+
 static void adreno_ringbuffer_set_constraint(struct kgsl_device *device,
 			struct kgsl_drawobj *drawobj)
 {
@@ -874,6 +878,8 @@ static inline int _get_alwayson_counter(struct adreno_device *adreno_dev,
 		ADRENO_GPUREV(adreno_dev) <= ADRENO_REV_A530)
 		*p++ = adreno_getreg(adreno_dev,
 			ADRENO_REG_RBBM_ALWAYSON_COUNTER_LO);
+	else if (adreno_is_a6xx(adreno_dev))
+		*p++ = A6XX_CP_ALWAYS_ON_COUNTER_LO | (1 << 30) | (2 << 18);
 	else
 		*p++ = adreno_getreg(adreno_dev,
 			ADRENO_REG_RBBM_ALWAYSON_COUNTER_LO) |

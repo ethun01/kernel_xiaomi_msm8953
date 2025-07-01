@@ -404,11 +404,8 @@ static ssize_t uevent_show(struct device *dev, struct device_attribute *attr,
 	if (!env)
 		return -ENOMEM;
 
-	/* Synchronize with really_probe() */
-	device_lock(dev);
 	/* let the kset specific function add its keys */
 	retval = kset->uevent_ops->uevent(kset, &dev->kobj, env);
-	device_unlock(dev);
 	if (retval)
 		goto out;
 
@@ -867,63 +864,12 @@ static inline struct kobject *get_glue_dir(struct device *dev)
  */
 static void cleanup_glue_dir(struct device *dev, struct kobject *glue_dir)
 {
-	unsigned int ref;
-
 	/* see if we live in a "glue" directory */
 	if (!live_in_glue_dir(glue_dir, dev))
 		return;
 
 	mutex_lock(&gdp_mutex);
-	/**
-	 * There is a race condition between removing glue directory
-	 * and adding a new device under the glue directory.
-	 *
-	 * CPU1:                                         CPU2:
-	 *
-	 * device_add()
-	 *   get_device_parent()
-	 *     class_dir_create_and_add()
-	 *       kobject_add_internal()
-	 *         create_dir()    // create glue_dir
-	 *
-	 *                                               device_add()
-	 *                                                 get_device_parent()
-	 *                                                   kobject_get() // get glue_dir
-	 *
-	 * device_del()
-	 *   cleanup_glue_dir()
-	 *     kobject_del(glue_dir)
-	 *
-	 *                                               kobject_add()
-	 *                                                 kobject_add_internal()
-	 *                                                   create_dir() // in glue_dir
-	 *                                                     sysfs_create_dir_ns()
-	 *                                                       kernfs_create_dir_ns(sd)
-	 *
-	 *       sysfs_remove_dir() // glue_dir->sd=NULL
-	 *       sysfs_put()        // free glue_dir->sd
-	 *
-	 *                                                         // sd is freed
-	 *                                                         kernfs_new_node(sd)
-	 *                                                           kernfs_get(glue_dir)
-	 *                                                           kernfs_add_one()
-	 *                                                           kernfs_put()
-	 *
-	 * Before CPU1 remove last child device under glue dir, if CPU2 add
-	 * a new device under glue dir, the glue_dir kobject reference count
-	 * will be increase to 2 in kobject_get(k). And CPU2 has been called
-	 * kernfs_create_dir_ns(). Meanwhile, CPU1 call sysfs_remove_dir()
-	 * and sysfs_put(). This result in glue_dir->sd is freed.
-	 *
-	 * Then the CPU2 will see a stale "empty" but still potentially used
-	 * glue dir around in kernfs_new_node().
-	 *
-	 * In order to avoid this happening, we also should make sure that
-	 * kernfs_node for glue_dir is released in CPU1 only when refcount
-	 * for glue_dir kobj is 1.
-	 */
-	ref = atomic_read(&glue_dir->kref.refcount);
-	if (!kobject_has_children(glue_dir) && !--ref)
+	if (!kobject_has_children(glue_dir) && atomic_read(&glue_dir->kref.refcount) == 1)
 		kobject_del(glue_dir);
 	kobject_put(glue_dir);
 	mutex_unlock(&gdp_mutex);
@@ -2341,50 +2287,6 @@ define_dev_printk_level(dev_notice, KERN_NOTICE);
 define_dev_printk_level(_dev_info, KERN_INFO);
 
 #endif
-
-/**
- * dev_err_probe - probe error check and log helper
- * @dev: the pointer to the struct device
- * @err: error value to test
- * @fmt: printf-style format string
- * @...: arguments as specified in the format string
- *
- * This helper implements common pattern present in probe functions for error
- * checking: print debug or error message depending if the error value is
- * -EPROBE_DEFER and propagate error upwards.
- * It replaces code sequence::
- * 	if (err != -EPROBE_DEFER)
- * 		dev_err(dev, ...);
- * 	else
- * 		dev_dbg(dev, ...);
- * 	return err;
- *
- * with::
- *
- * 	return dev_err_probe(dev, err, ...);
- *
- * Returns @err.
- *
- */
-int dev_err_probe(const struct device *dev, int err, const char *fmt, ...)
-{
-	struct va_format vaf;
-	va_list args;
-
-	va_start(args, fmt);
-	vaf.fmt = fmt;
-	vaf.va = &args;
-
-	if (err != -EPROBE_DEFER)
-		dev_err(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
-	else
-		dev_dbg(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
-
-	va_end(args);
-
-	return err;
-}
-EXPORT_SYMBOL_GPL(dev_err_probe);
 
 static inline bool fwnode_is_primary(struct fwnode_handle *fwnode)
 {

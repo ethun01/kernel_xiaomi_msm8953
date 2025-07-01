@@ -1960,10 +1960,9 @@ EXPORT_SYMBOL(cpufreq_unregister_notifier);
  * twice in parallel for the same policy and that it will never be called in
  * parallel with either ->target() or ->target_index() for the same policy.
  *
- * Returns the actual frequency set for the CPU.
- *
- * If 0 is returned by the driver's ->fast_switch() callback to indicate an
- * error condition, the hardware configuration must be preserved.
+ * If CPUFREQ_ENTRY_INVALID is returned by the driver's ->fast_switch()
+ * callback to indicate an error condition, the hardware configuration must be
+ * preserved.
  */
 unsigned int cpufreq_driver_fast_switch(struct cpufreq_policy *policy,
 					unsigned int target_freq)
@@ -2320,7 +2319,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	* because new_policy is a copy of policy with one field updated.
 	*/
 	if (new_policy->min > new_policy->max)
-		new_policy->min = new_policy->max;
+		return -EINVAL;
 
 	/* verify the cpu speed can be set within this limit */
 	ret = cpufreq_driver->verify(new_policy);

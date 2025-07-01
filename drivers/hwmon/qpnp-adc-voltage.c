@@ -2031,11 +2031,10 @@ struct qpnp_vadc_chip *qpnp_get_vadc(struct device *dev, const char *name)
 }
 EXPORT_SYMBOL(qpnp_get_vadc);
 
-static int32_t qpnp_vadc_conv_seq_request_base(struct qpnp_vadc_chip *vadc,
-					enum qpnp_vadc_trigger trigger_channel,
+int32_t qpnp_vadc_conv_seq_request(struct qpnp_vadc_chip *vadc,
+				enum qpnp_vadc_trigger trigger_channel,
 					enum qpnp_vadc_channels channel,
-					struct qpnp_vadc_result *result,
-					int pmsafe)
+					struct qpnp_vadc_result *result)
 {
 	int rc = 0, scale_type, amux_prescaling, dt_index = 0, calib_type = 0;
 	uint32_t ref_channel, count = 0, local_idx = 0;
@@ -2276,31 +2275,11 @@ fail_unlock:
 
 	return rc;
 }
-
-int32_t qpnp_vadc_conv_seq_request(struct qpnp_vadc_chip *vadc,
-				enum qpnp_vadc_trigger trigger_channel,
-					enum qpnp_vadc_channels channel,
-					struct qpnp_vadc_result *result)
-{
-	return qpnp_vadc_conv_seq_request_base(vadc, trigger_channel, channel,
-					result, 0);
-}
 EXPORT_SYMBOL(qpnp_vadc_conv_seq_request);
 
-int32_t qpnp_vadc_conv_seq_request_pmsafe(struct qpnp_vadc_chip *vadc,
-					enum qpnp_vadc_trigger trigger_channel,
-					enum qpnp_vadc_channels channel,
-					struct qpnp_vadc_result *result)
-{
-	return qpnp_vadc_conv_seq_request_base(vadc, trigger_channel, channel,
-					result, 1);
-}
-EXPORT_SYMBOL(qpnp_vadc_conv_seq_request_pmsafe);
-
-int32_t qpnp_vadc_read_base(struct qpnp_vadc_chip *vadc,
+int32_t qpnp_vadc_read(struct qpnp_vadc_chip *vadc,
 				enum qpnp_vadc_channels channel,
-				struct qpnp_vadc_result *result,
-				int pmsafe)
+				struct qpnp_vadc_result *result)
 {
 	struct qpnp_vadc_result die_temp_result;
 	int rc = 0;
@@ -2318,16 +2297,15 @@ int32_t qpnp_vadc_read_base(struct qpnp_vadc_chip *vadc,
 	}
 
 	if (channel == VBAT_SNS) {
-		rc = qpnp_vadc_conv_seq_request_base(vadc, ADC_SEQ_NONE,
-						channel, result, pmsafe);
+		rc = qpnp_vadc_conv_seq_request(vadc, ADC_SEQ_NONE,
+				channel, result);
 		if (rc < 0) {
 			pr_err("Error reading vbatt\n");
 			return rc;
 		}
 
-		rc = qpnp_vadc_conv_seq_request_base(vadc, ADC_SEQ_NONE,
-						DIE_TEMP, &die_temp_result,
-						pmsafe);
+		rc = qpnp_vadc_conv_seq_request(vadc, ADC_SEQ_NONE,
+				DIE_TEMP, &die_temp_result);
 		if (rc < 0) {
 			pr_err("Error reading die_temp\n");
 			return rc;
@@ -2375,25 +2353,10 @@ int32_t qpnp_vadc_read_base(struct qpnp_vadc_chip *vadc,
 
 		return 0;
 	} else
-		return qpnp_vadc_conv_seq_request_base(vadc, ADC_SEQ_NONE,
-						channel, result, pmsafe);
-}
-
-int32_t qpnp_vadc_read(struct qpnp_vadc_chip *vadc,
-				enum qpnp_vadc_channels channel,
-				struct qpnp_vadc_result *result)
-{
-	return qpnp_vadc_read_base(vadc, channel, result, 0);
+		return qpnp_vadc_conv_seq_request(vadc, ADC_SEQ_NONE,
+				channel, result);
 }
 EXPORT_SYMBOL(qpnp_vadc_read);
-
-int32_t qpnp_vadc_read_pmsafe(struct qpnp_vadc_chip *vadc,
-				enum qpnp_vadc_channels channel,
-				struct qpnp_vadc_result *result)
-{
-	return qpnp_vadc_read_base(vadc, channel, result, 1);
-}
-EXPORT_SYMBOL(qpnp_vadc_read_pmsafe);
 
 static void qpnp_vadc_lock(struct qpnp_vadc_chip *vadc)
 {
@@ -3051,7 +3014,7 @@ static int qpnp_vadc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int qpnp_vadc_suspend_noirq_base(struct device *dev, int pmsafe)
+static int qpnp_vadc_suspend_noirq(struct device *dev)
 {
 	struct qpnp_vadc_chip *vadc = dev_get_drvdata(dev);
 	u8 status = 0;
@@ -3060,22 +3023,17 @@ static int qpnp_vadc_suspend_noirq_base(struct device *dev, int pmsafe)
 	if (((status & QPNP_VADC_STATUS1_OP_MODE_MASK) >>
 		QPNP_VADC_OP_MODE_SHIFT) == QPNP_VADC_MEAS_INT_MODE) {
 		pr_debug("Meas interval in progress\n");
-	} else if (vadc->vadc_poll_eoc && !pmsafe) {
+	} else if (vadc->vadc_poll_eoc) {
 		status &= QPNP_VADC_STATUS1_REQ_STS_EOC_MASK;
 		pr_debug("vadc conversion status=%d\n", status);
 		if (status != QPNP_VADC_STATUS1_EOC) {
-			pr_err("Aborting suspend, adc conversion requested while suspending\n");
-			pr_err("vadc conversion status=%d\n", status);
+			pr_err(
+				"Aborting suspend, adc conversion requested while suspending\n");
 			return -EBUSY;
 		}
 	}
 
 	return 0;
-}
-
-static int qpnp_vadc_suspend_noirq(struct device *dev)
-{
-	return qpnp_vadc_suspend_noirq_base(dev, 0);
 }
 
 static const struct dev_pm_ops qpnp_vadc_pm_ops = {
